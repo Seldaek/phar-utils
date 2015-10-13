@@ -98,8 +98,7 @@ class Timestamps
      */
     public function save($path, $signatureAlgo)
     {
-        // detect signature position
-        $pos = strrpos($this->contents, "\n") + 1;
+        $pos = $this->determineSignatureBegin();
 
         $algos = array(
             \Phar::MD5 => 'md5',
@@ -120,7 +119,8 @@ class Timestamps
             . pack('L', $signatureAlgo)
             // ohai Greg & Marcus
             . 'GBMB';
-        $this->contents = substr_replace($this->contents, $signature, $pos, strlen($this->contents) - $pos);
+
+        $this->contents = substr($this->contents, 0, $pos) . $signature;
 
         return file_put_contents($path, $this->contents);
     }
@@ -130,5 +130,63 @@ class Timestamps
         $res = unpack("L", substr($this->contents, $pos, $bytes));
 
         return $res[1];
+    }
+
+    /**
+     * Determine the beginning of the signature.
+     *
+     * @return int
+     */
+    private function determineSignatureBegin()
+    {
+        // detect signature position
+        if (!preg_match('{__HALT_COMPILER\(\);(?: +\?>)?\r?\n}', $this->contents, $match, PREG_OFFSET_CAPTURE)) {
+            throw new \RuntimeException('Could not detect the stub\'s end in the phar');
+        }
+
+        // set starting position and skip past manifest length
+        $pos = $match[0][1] + strlen($match[0][0]);
+        $stubEnd = $pos + $this->readUint($pos, 4);
+
+        $pos += 4;
+        $numFiles = $this->readUint($pos, 4);
+
+        $pos += 4;
+
+        // skip API version (YOLO)
+        $pos += 2;
+
+        // skip PHAR flags
+        $pos += 4;
+
+        $aliasLength = $this->readUint($pos, 4);
+        $pos += 4 + $aliasLength;
+
+        $metadataLength = $this->readUint($pos, 4);
+        $pos += 4 + $metadataLength;
+
+        $compressedSizes = 0;
+        while ($pos < $stubEnd) {
+            $filenameLength = $this->readUint($pos, 4);
+            $pos += 4 + $filenameLength;
+
+            // skip filesize and timestamp
+            $pos += 2*4;
+
+            $compressedSizes += $this->readUint($pos, 4);
+            // skip compressed file size, crc32 checksum and file flags
+            $pos += 3*4;
+
+            $metadataLength = $this->readUint($pos, 4);
+            $pos += 4 + $metadataLength;
+
+            $numFiles--;
+        }
+
+        if ($numFiles !== 0) {
+            throw new \LogicException('All files were not processed, something must have gone wrong');
+        }
+
+        return $pos + $compressedSizes;
     }
 }
