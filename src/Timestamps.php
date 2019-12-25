@@ -127,7 +127,7 @@ class Timestamps
 
     private function readUint($pos, $bytes)
     {
-        $res = unpack("L", substr($this->contents, $pos, $bytes));
+        $res = unpack('V', substr($this->contents, $pos, $bytes));
 
         return $res[1];
     }
