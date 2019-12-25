@@ -146,7 +146,7 @@ class Timestamps
 
         // set starting position and skip past manifest length
         $pos = $match[0][1] + strlen($match[0][0]);
-        $stubEnd = $pos + $this->readUint($pos, 4);
+        $manifestEnd = $pos + 4 + $this->readUint($pos, 4);
 
         $pos += 4;
         $numFiles = $this->readUint($pos, 4);
@@ -166,7 +166,7 @@ class Timestamps
         $pos += 4 + $metadataLength;
 
         $compressedSizes = 0;
-        while ($pos < $stubEnd) {
+        while (($numFiles > 0) && ($pos < $manifestEnd - 24)) {
             $filenameLength = $this->readUint($pos, 4);
             $pos += 4 + $filenameLength;
 
@@ -187,6 +187,6 @@ class Timestamps
             throw new \LogicException('All files were not processed, something must have gone wrong');
         }
 
-        return $pos + $compressedSizes;
+        return $manifestEnd + $compressedSizes;
     }
 }
