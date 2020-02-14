@@ -28,6 +28,12 @@ API
   > Algo must be one of `Phar::MD5`, `Phar::SHA1`, `Phar::SHA256`
   > or `Phar::SHA512`
 
+### `Seld\PharUtils\Linter`
+
+- `Linter::lint($pharFile)`
+
+  > Lints all php files inside a given phar with the current PHP version.
+
 Requirements
 ------------
 
