@@ -20,20 +20,52 @@ class Linter
      */
     public static function lint($path)
     {
+        $php = defined('PHP_BINARY') ? PHP_BINARY : 'php';
+
+        if ($isWindows = defined('PHP_WINDOWS_VERSION_BUILD')) {
+            $tmpFile = @tempnam(sys_get_temp_dir(), '');
+
+            if (!$tmpFile || !is_writable($tmpFile)) {
+                throw new \RuntimeException('Unable to create temp file');
+            }
+
+            $php = self::escapeWindowsPath($php);
+            $tmpFile = self::escapeWindowsPath($tmpFile);
+
+            // PHP 8 encloses the command in double-quotes
+            if (PHP_VERSION_ID >= 80000) {
+                $format = '%s -l %s';
+            } else {
+                $format = '"%s -l %s"';
+            }
+
+            $command = sprintf($format, $php, $tmpFile);
+        } else {
+            $command = "'".$php."' -l";
+        }
+
+        $descriptorspec = array(
+            0 => array('pipe', 'r'),
+            1 => array('pipe', 'w'),
+            2 => array('pipe', 'w')
+        );
+
         foreach (new \RecursiveIteratorIterator(new \Phar($path)) as $file) {
             if ($file->isDir()) {
                 continue;
             }
             if (substr($file, -4) === '.php') {
-                $descriptorspec = array(
-                   0 => array("pipe", "r"),
-                   1 => array("pipe", "w"),
-                   2 => array("pipe", "w")
-                );
+                $filename = (string) $file;
 
-                $process = proc_open((defined('PHP_BINARY') ? PHP_BINARY : 'php').' -l', $descriptorspec, $pipes);
+                if ($isWindows) {
+                    file_put_contents($tmpFile, file_get_contents($filename));
+                }
+
+                $process = proc_open($command, $descriptorspec, $pipes);
                 if (is_resource($process)) {
-                    fwrite($pipes[0], file_get_contents((string) $file));
+                    if (!$isWindows) {
+                        fwrite($pipes[0], file_get_contents($filename));
+                    }
                     fclose($pipes[0]);
 
                     $stdout = stream_get_contents($pipes[1]);
@@ -44,6 +76,9 @@ class Linter
                     $exitCode = proc_close($process);
 
                     if ($exitCode !== 0) {
+                        if ($isWindows) {
+                            $stderr = str_replace($tmpFile, $filename, $stderr);
+                        }
                         throw new \UnexpectedValueException('Failed linting '.$file.': '.$stderr);
                     }
                 } else {
@@ -51,5 +86,25 @@ class Linter
                 }
             }
         }
+
+        if ($isWindows) {
+            @unlink($tmpFile);
+        }
+    }
+
+    /**
+     * Escapes a Windows file path
+     *
+     * @param string $path
+     * @return string The escaped path
+     */
+    private static function escapeWindowsPath($path)
+    {
+        // Quote if path contains spaces or brackets
+        if (strpbrk($path, " ()") !== false) {
+            $path = '"'.$path.'"';
+        }
+
+        return $path;
     }
 }
