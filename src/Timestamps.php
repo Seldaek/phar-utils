@@ -28,11 +28,11 @@ class Timestamps
      *
      * The PHAR signature can then be produced in a reproducible manner.
      *
-     * @param int|DateTime|string $timestamp Date string or DateTime or unix timestamp to use
+     * @param int|\DateTimeInterface|string $timestamp Date string or DateTime or unix timestamp to use
      */
     public function updateTimestamps($timestamp = null)
     {
-        if ($timestamp instanceof \DateTime) {
+        if ($timestamp instanceof \DateTime || $timestamp instanceof \DateTimeInterface) {
             $timestamp = $timestamp->getTimestamp();
         } elseif (is_string($timestamp)) {
             $timestamp = strtotime($timestamp);
